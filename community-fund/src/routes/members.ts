@@ -6,7 +6,7 @@
  */
 
 import { FastifyInstance } from "fastify";
-import { registerMember, getMemberById } from "../db/memberRegistry";
+import { registerMember, getMemberById, getAllMembers } from "../db/memberRegistry";
 import { logEvent } from "../services/eventLog";
 
 export async function memberRoutes(app: FastifyInstance): Promise<void> {
@@ -31,6 +31,11 @@ export async function memberRoutes(app: FastifyInstance): Promise<void> {
     });
 
     return reply.status(201).send({ success: true, data: member });
+  });
+
+  app.get("/members", async (_req, reply) => {
+    const members = await getAllMembers();
+    return reply.send({ success: true, data: members });
   });
 
   app.get<{ Params: { id: string } }>("/members/:id", async (req, reply) => {
