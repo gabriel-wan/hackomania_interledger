@@ -10,6 +10,8 @@
 
 import Fastify from "fastify";
 import cors from "@fastify/cors";
+import fastifyStatic from "@fastify/static";
+import path from "path";
 import { config } from "./config";
 import { initClickHouse } from "./db/clickhouse";
 import { initPaymentsClient } from "./services/payments";
@@ -32,6 +34,10 @@ async function bootstrap(): Promise<void> {
 
   // 3. Middleware
   await app.register(cors, { origin: true });
+  await app.register(fastifyStatic, {
+    root: path.join(__dirname, "..", "public"),
+    prefix: "/",
+  });
 
   // 4. Routes
   await app.register(memberRoutes);

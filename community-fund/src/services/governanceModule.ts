@@ -34,8 +34,8 @@ export async function createProposal(params: {
     votesNo: 0,
     votesAbstain: 0,
     status: "open",
-    expiresAt: new Date(Date.now() + (params.expiresInHours ?? 48) * 60 * 60 * 1000).toISOString(),
-    createdAt: new Date().toISOString(),
+    expiresAt: new Date(Date.now() + (params.expiresInHours ?? 48) * 60 * 60 * 1000).toISOString().replace("Z", ""),
+    createdAt: new Date().toISOString().replace("Z", ""),
   };
 
   await ch.insert({
@@ -70,12 +70,13 @@ export async function getOpenProposals(): Promise<Proposal[]> {
   const result = await ch.query({
     query: `
       SELECT
-        p.*,
+        p.id, p.type, p.title, p.description, p.proposed_by,
+        p.payload, p.status, p.expires_at, p.created_at,
         countIf(v.choice = 'yes') AS votes_yes,
         countIf(v.choice = 'no') AS votes_no,
         countIf(v.choice = 'abstain') AS votes_abstain
-      FROM proposals FINAL p
-      LEFT JOIN votes v ON v.proposal_id = p.id
+      FROM proposals AS p FINAL
+      LEFT JOIN votes AS v ON v.proposal_id = p.id
       WHERE p.status = 'open'
       GROUP BY p.id, p.type, p.title, p.description, p.proposed_by,
                p.payload, p.status, p.expires_at, p.created_at
@@ -90,12 +91,13 @@ export async function getProposalById(id: string): Promise<Proposal | null> {
   const result = await ch.query({
     query: `
       SELECT
-        p.*,
+        p.id, p.type, p.title, p.description, p.proposed_by,
+        p.payload, p.status, p.expires_at, p.created_at,
         countIf(v.choice = 'yes') AS votes_yes,
         countIf(v.choice = 'no') AS votes_no,
         countIf(v.choice = 'abstain') AS votes_abstain
-      FROM proposals FINAL p
-      LEFT JOIN votes v ON v.proposal_id = p.id
+      FROM proposals AS p FINAL
+      LEFT JOIN votes AS v ON v.proposal_id = p.id
       WHERE p.id = {id:String}
       GROUP BY p.id, p.type, p.title, p.description, p.proposed_by,
                p.payload, p.status, p.expires_at, p.created_at
@@ -122,7 +124,7 @@ export async function castVote(params: {
     proposalId: params.proposalId,
     memberId: params.memberId,
     choice: params.choice,
-    createdAt: new Date().toISOString(),
+    createdAt: new Date().toISOString().replace("Z", ""),
   };
 
   await ch.insert({
@@ -150,17 +152,18 @@ export async function tallyExpiredProposals(): Promise<void> {
   const result = await ch.query({
     query: `
       SELECT
-        p.*,
+        p.id, p.type, p.title, p.description, p.proposed_by,
+        p.payload, p.status, p.expires_at, p.created_at,
         countIf(v.choice = 'yes') AS votes_yes,
         countIf(v.choice = 'no') AS votes_no,
         countIf(v.choice = 'abstain') AS votes_abstain
-      FROM proposals FINAL p
-      LEFT JOIN votes v ON v.proposal_id = p.id
-      WHERE p.status = 'open' AND p.expires_at <= {now:String}
+      FROM proposals AS p FINAL
+      LEFT JOIN votes AS v ON v.proposal_id = p.id
+      WHERE p.status = 'open' AND p.expires_at <= toDateTime64({now:String}, 3, 'UTC')
       GROUP BY p.id, p.type, p.title, p.description, p.proposed_by,
                p.payload, p.status, p.expires_at, p.created_at
     `,
-    query_params: { now: new Date().toISOString() },
+    query_params: { now: new Date().toISOString().replace("Z", "") },
     format: "JSONEachRow",
   });
 
@@ -187,7 +190,7 @@ export async function tallyExpiredProposals(): Promise<void> {
         votes_abstain: proposal.votesAbstain,
         status: newStatus,
         expires_at: proposal.expiresAt,
-        created_at: new Date().toISOString(), // newer timestamp = wins in ReplacingMergeTree
+        created_at: new Date().toISOString().replace("Z", ""), // newer timestamp = wins in ReplacingMergeTree
       }],
       format: "JSONEachRow",
     });
@@ -215,7 +218,7 @@ async function applyPassedProposal(proposal: Proposal): Promise<void> {
   for (const rule of existingRules) {
     await ch.insert({
       table: "payout_rules",
-      values: [{ ...rule, active: 0, created_at: new Date().toISOString() }],
+      values: [{ ...rule, active: 0, created_at: new Date().toISOString().replace("Z", "") }],
       format: "JSONEachRow",
     });
   }
@@ -231,9 +234,9 @@ async function applyPassedProposal(proposal: Proposal): Promise<void> {
       eligibility_radius_km: payload.eligibilityRadiusKm ?? 100,
       min_severity_threshold: payload.minSeverityThreshold ?? 5,
       proposed_by: proposal.proposedBy,
-      approved_at: new Date().toISOString(),
+      approved_at: new Date().toISOString().replace("Z", ""),
       active: 1,
-      created_at: new Date().toISOString(),
+      created_at: new Date().toISOString().replace("Z", ""),
     }],
     format: "JSONEachRow",
   });

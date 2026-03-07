@@ -7,7 +7,7 @@
 import dotenv from "dotenv";
 dotenv.config();
 
-function require(key: string, fallback?: string): string {
+function requireEnv(key: string, fallback?: string): string {
   const value = process.env[key] ?? fallback;
   if (!value) throw new Error(`Missing required environment variable: ${key}`);
   return value;
@@ -20,9 +20,9 @@ export const config = {
   },
 
   openPayments: {
-    walletAddress: require("OP_WALLET_ADDRESS"),
-    privateKeyPath: require("OP_PRIVATE_KEY_PATH", "./private.key"),
-    keyId: require("OP_KEY_ID"),
+    walletAddress: requireEnv("OP_WALLET_ADDRESS"),
+    privateKeyPath: requireEnv("OP_PRIVATE_KEY_PATH", "./private.key"),
+    keyId: requireEnv("OP_KEY_ID"),
   },
 
   db: {
@@ -45,7 +45,7 @@ export const config = {
   },
 
   auth: {
-    jwtSecret: require("JWT_SECRET", "dev-secret-change-in-prod"),
+    jwtSecret: requireEnv("JWT_SECRET", "dev-secret-change-in-prod"),
   },
 
   audit: {

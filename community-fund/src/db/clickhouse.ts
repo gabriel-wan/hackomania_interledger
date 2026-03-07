@@ -37,9 +37,15 @@ export async function initClickHouse(): Promise<void> {
   await createTables();
 }
 
+async function execDDL(query: string): Promise<void> {
+  const result = await ch.exec({ query });
+  result.stream.on("data", () => {});
+  await new Promise<void>((resolve) => result.stream.on("end", resolve));
+}
+
 async function createTables(): Promise<void> {
   // Members — ReplacingMergeTree so profile updates replace old rows
-  await ch.exec({ query: `
+  await execDDL(`
     CREATE TABLE IF NOT EXISTS members (
       id           String,
       wallet_address String,
@@ -52,10 +58,10 @@ async function createTables(): Promise<void> {
     )
     ENGINE = ReplacingMergeTree(created_at)
     ORDER BY (id)
-  ` });
+  `);
 
   // Fund pool snapshots — append balance snapshots, query latest
-  await ch.exec({ query: `
+  await execDDL(`
     CREATE TABLE IF NOT EXISTS fund_pool_snapshots (
       id           String,
       total_balance Int64,
@@ -64,10 +70,10 @@ async function createTables(): Promise<void> {
     )
     ENGINE = MergeTree()
     ORDER BY (snapshot_at)
-  ` });
+  `);
 
   // Contributions — pure append, no updates
-  await ch.exec({ query: `
+  await execDDL(`
     CREATE TABLE IF NOT EXISTS contributions (
       id                     String,
       member_id              String,
@@ -81,10 +87,10 @@ async function createTables(): Promise<void> {
     )
     ENGINE = MergeTree()
     ORDER BY (created_at, member_id)
-  ` });
+  `);
 
   // Payout rules — ReplacingMergeTree so governance updates replace old rules
-  await ch.exec({ query: `
+  await execDDL(`
     CREATE TABLE IF NOT EXISTS payout_rules (
       id                      String,
       name                    String,
@@ -99,10 +105,10 @@ async function createTables(): Promise<void> {
     )
     ENGINE = ReplacingMergeTree(created_at)
     ORDER BY (id)
-  ` });
+  `);
 
   // Disaster signals — append only
-  await ch.exec({ query: `
+  await execDDL(`
     CREATE TABLE IF NOT EXISTS disaster_signals (
       id                String,
       type              String,
@@ -117,10 +123,10 @@ async function createTables(): Promise<void> {
     )
     ENGINE = MergeTree()
     ORDER BY (detected_at, type)
-  ` });
+  `);
 
   // Payouts — append only, joins to signals and rules at query time
-  await ch.exec({ query: `
+  await execDDL(`
     CREATE TABLE IF NOT EXISTS payouts (
       id                      String,
       disaster_signal_id      String,
@@ -134,10 +140,10 @@ async function createTables(): Promise<void> {
     )
     ENGINE = MergeTree()
     ORDER BY (created_at, member_id)
-  ` });
+  `);
 
   // Governance proposals — ReplacingMergeTree (vote counts update)
-  await ch.exec({ query: `
+  await execDDL(`
     CREATE TABLE IF NOT EXISTS proposals (
       id           String,
       type         String,
@@ -154,10 +160,10 @@ async function createTables(): Promise<void> {
     )
     ENGINE = ReplacingMergeTree(created_at)
     ORDER BY (id)
-  ` });
+  `);
 
   // Votes — append only (one row per member per proposal)
-  await ch.exec({ query: `
+  await execDDL(`
     CREATE TABLE IF NOT EXISTS votes (
       id           String,
       proposal_id  String,
@@ -167,11 +173,11 @@ async function createTables(): Promise<void> {
     )
     ENGINE = MergeTree()
     ORDER BY (proposal_id, member_id)
-  ` });
+  `);
 
   // Audit event log — pure append, cryptographically chained
   // MergeTree guarantees no mutation — ideal for tamper-evident log
-  await ch.exec({ query: `
+  await execDDL(`
     CREATE TABLE IF NOT EXISTS audit_events (
       id        String,
       type      String,
@@ -183,7 +189,7 @@ async function createTables(): Promise<void> {
     )
     ENGINE = MergeTree()
     ORDER BY (timestamp, id)
-  ` });
+  `);
 
   console.log("ClickHouse tables ready.");
 }

@@ -63,7 +63,7 @@ export async function contributionRoutes(app: FastifyInstance): Promise<void> {
       opGrantId: "",
       opIncomingPaymentId: incomingPaymentId,
       status: "pending",
-      createdAt: new Date().toISOString(),
+      createdAt: new Date().toISOString().replace("Z", ""),
     };
 
     await ch.insert({

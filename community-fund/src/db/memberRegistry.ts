@@ -19,8 +19,8 @@ export async function registerMember(payload: MemberRegistrationPayload): Promis
     email: payload.email,
     location: payload.location,
     consentGiven: payload.consentGiven,
-    consentTimestamp: new Date().toISOString(),
-    createdAt: new Date().toISOString(),
+    consentTimestamp: new Date().toISOString().replace("Z", ""),
+    createdAt: new Date().toISOString().replace("Z", ""),
   };
   await ch.insert({
     table: "members",

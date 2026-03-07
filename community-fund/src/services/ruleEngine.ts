@@ -199,7 +199,7 @@ async function dispatchPayout(params: {
     ruleId: params.rule.id,
     opOutgoingPaymentId: outgoingPaymentId,
     status: "completed",
-    createdAt: new Date().toISOString(),
+    createdAt: new Date().toISOString().replace("Z", ""),
   };
 
   await ch.insert({
