@@ -127,8 +127,8 @@ export async function dashboardRoutes(app: FastifyInstance): Promise<void> {
   app.get("/dashboard/signals", async (_req, reply) => {
     const result = await ch.query({
       query: `
-        SELECT id, type, severity, location, source_api, source_url,
-               verified, verification_note, detected_at
+        SELECT id, type, severity, location, latitude, longitude,
+               source_api, source_url, verified, verification_note, detected_at
         FROM disaster_signals
         ORDER BY detected_at DESC
         LIMIT 20
