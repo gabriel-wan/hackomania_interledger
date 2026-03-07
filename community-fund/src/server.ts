@@ -22,6 +22,8 @@ import { contributionRoutes } from "./routes/contributions";
 import { governanceRoutes } from "./routes/governance";
 import { auditRoutes } from "./routes/audit";
 import { dashboardRoutes } from "./routes/dashboard";
+import { testRoutes } from "./routes/test";
+import { contributeRoutes } from "./routes/contribute";
 
 const app = Fastify({ logger: true });
 
@@ -34,17 +36,22 @@ async function bootstrap(): Promise<void> {
 
   // 3. Middleware
   await app.register(cors, { origin: true });
-  await app.register(fastifyStatic, {
-    root: path.join(__dirname, "..", "public"),
-    prefix: "/",
-  });
 
-  // 4. Routes
+  // 4. Routes (register BEFORE static to avoid catch-all conflicts)
   await app.register(memberRoutes);
   await app.register(contributionRoutes);
   await app.register(governanceRoutes);
   await app.register(auditRoutes);
   await app.register(dashboardRoutes);
+  await app.register(testRoutes);
+  await app.register(contributeRoutes);
+
+  // 5. Static files (after routes so API routes take priority)
+  await app.register(fastifyStatic, {
+    root: path.join(__dirname, "..", "public"),
+    prefix: "/",
+    wildcard: false,
+  });
 
   // 5. Health check
   app.get("/health", async () => ({

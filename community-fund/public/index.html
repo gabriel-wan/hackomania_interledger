@@ -167,11 +167,15 @@
   <div class="container">
     <div class="tabs">
       <button class="tab active" data-tab="overview">Overview</button>
+      <button class="tab" data-tab="contribute">Contribute</button>
       <button class="tab" data-tab="members">Members</button>
       <button class="tab" data-tab="governance">Governance</button>
       <button class="tab" data-tab="signals">Disaster Signals</button>
       <button class="tab" data-tab="audit">Audit Log</button>
     </div>
+
+    <!-- Success/Error banner -->
+    <div id="banner" style="display:none; padding:1rem; border-radius:10px; margin-bottom:1rem; font-weight:600;"></div>
 
     <!-- Overview -->
     <div class="section active" id="sec-overview">
@@ -204,6 +208,35 @@
             <thead><tr><th>Amount</th><th>Disaster</th><th>Location</th><th>Method</th><th>Date</th></tr></thead>
             <tbody id="recentPayouts"></tbody>
           </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Contribute -->
+    <div class="section" id="sec-contribute">
+      <div class="panel">
+        <div class="panel-header">
+          <h2>Send a Contribution via Interledger</h2>
+        </div>
+        <div class="panel-body">
+          <p style="color:var(--muted); margin-bottom:1rem; font-size:0.9rem;">Enter your ILP testnet wallet address and the amount to contribute. You'll be redirected to your wallet to approve the payment, then returned here.</p>
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Your Wallet Address</label>
+              <input id="contribWallet" placeholder="https://ilp.interledger-test.dev/your-wallet" />
+            </div>
+            <div class="form-group">
+              <label>Your Name</label>
+              <input id="contribName" placeholder="Your name" />
+            </div>
+            <div class="form-group">
+              <label>Amount (in smallest unit, e.g. 1000 = $10.00)</label>
+              <input id="contribAmount" type="number" placeholder="1000" value="1000" />
+            </div>
+          </div>
+          <div class="actions">
+            <button class="btn btn-green" id="contribBtn" onclick="startContribution()">Pay with Interledger</button>
+          </div>
         </div>
       </div>
     </div>
@@ -555,7 +588,7 @@
 
     // Helpers
     function formatAmount(v) {
-      return Number(v || 0).toLocaleString();
+      return (Number(v || 0) / 100).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     }
     function formatDate(d) {
       if (!d) return '-';
@@ -567,6 +600,50 @@
       el.textContent = String(s);
       return el.innerHTML;
     }
+
+    // Contribute
+    async function startContribution() {
+      const wallet = document.getElementById('contribWallet').value.trim();
+      const name = document.getElementById('contribName').value.trim();
+      const amount = Number(document.getElementById('contribAmount').value);
+      if (!wallet || !amount) return toast('Wallet address and amount required', true);
+
+      const btn = document.getElementById('contribBtn');
+      btn.disabled = true;
+      btn.textContent = 'Redirecting...';
+      try {
+        const { data } = await api('/contribute/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ senderWalletAddress: wallet, senderName: name, amount }),
+        });
+        window.location.href = data.redirectUrl;
+      } catch {
+        btn.disabled = false;
+        btn.textContent = 'Pay with Interledger';
+      }
+    }
+
+    // Check URL params for contribution result
+    (function checkContributionResult() {
+      const params = new URLSearchParams(window.location.search);
+      const banner = document.getElementById('banner');
+      if (params.has('contributed')) {
+        const amt = Number(params.get('contributed'));
+        const cur = params.get('currency') || 'USD';
+        banner.style.display = 'block';
+        banner.style.background = 'var(--green)';
+        banner.style.color = '#fff';
+        banner.textContent = 'Payment successful! You contributed ' + formatAmount(amt) + ' ' + cur + ' to the Community Fund.';
+        window.history.replaceState({}, '', '/');
+      } else if (params.has('error')) {
+        banner.style.display = 'block';
+        banner.style.background = 'var(--red)';
+        banner.style.color = '#fff';
+        banner.textContent = 'Payment error: ' + decodeURIComponent(params.get('error'));
+        window.history.replaceState({}, '', '/');
+      }
+    })();
 
     // Init
     loadDashboard();

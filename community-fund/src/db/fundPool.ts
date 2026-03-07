@@ -21,7 +21,7 @@ export async function getBalance(): Promise<FundPool> {
   return {
     id: "main",
     totalBalance: Number(rows[0]?.total_balance ?? 0),
-    currency: "USD",
+    currency: "SGD",
     lastUpdated: new Date().toISOString(),
   };
 }
