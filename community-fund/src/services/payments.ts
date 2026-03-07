@@ -10,10 +10,12 @@
  * Docs: https://openpayments.dev
  */
 
-import { createAuthenticatedClient, OpenPaymentsClientError } from "@interledger/open-payments";
+import { createAuthenticatedClient, OpenPaymentsClientError, isPendingGrant, isFinalizedGrant } from "@interledger/open-payments";
 import { config } from "../config";
 
 let client: Awaited<ReturnType<typeof createAuthenticatedClient>>;
+
+export function getClient() { return client; }
 
 /**
  * Initializes the Open Payments authenticated client.
@@ -24,6 +26,7 @@ export async function initPaymentsClient(): Promise<void> {
     walletAddressUrl: config.openPayments.walletAddress,
     privateKey: config.openPayments.privateKeyPath,
     keyId: config.openPayments.keyId,
+    validateResponses: false,
   });
 
   console.log("Open Payments client initialized.");
@@ -47,17 +50,37 @@ export async function createIncomingPayment(params: {
     url: config.openPayments.walletAddress,
   });
 
+  // Request a non-interactive grant for incoming-payment on the fund wallet
+  const grant = await client.grant.request(
+    { url: walletAddress.authServer },
+    {
+      access_token: {
+        access: [
+          {
+            type: "incoming-payment",
+            actions: ["create", "read", "list"],
+            identifier: config.openPayments.walletAddress,
+          },
+        ],
+      },
+    }
+  );
+
+  if (isPendingGrant(grant)) {
+    throw new Error("Expected non-interactive grant for incoming payment.");
+  }
+
   const incomingPayment = await client.incomingPayment.create(
-    { url: walletAddress.resourceServer },
+    { url: walletAddress.resourceServer, accessToken: grant.access_token.value },
     {
       walletAddress: config.openPayments.walletAddress,
       incomingAmount: {
         value: String(params.amount),
-        assetCode: params.currency,
-        assetScale: 2,
+        assetCode: walletAddress.assetCode,
+        assetScale: walletAddress.assetScale,
       },
       metadata: { memberId: params.memberId },
-    }
+    } as any
   );
 
   return {
@@ -112,7 +135,7 @@ export async function requestRecurringContributionGrant(params: {
   );
 
   // Grant requires interactive redirect — return continue details to frontend
-  if (!("interact" in grant)) {
+  if (!isPendingGrant(grant)) {
     throw new Error("Expected interactive grant response.");
   }
 
@@ -163,7 +186,7 @@ export async function requestPayoutGrant(params: {
     }
   );
 
-  if (!("access_token" in grant)) {
+  if (isPendingGrant(grant)) {
     throw new Error("Expected non-interactive grant — fund wallet requires interactive setup.");
   }
 
