@@ -52,6 +52,8 @@ async function createTables(): Promise<void> {
       name         String,
       email        String,
       location     String,
+      latitude     Float64,
+      longitude    Float64,
       consent_given UInt8,
       consent_timestamp DateTime64(3, 'UTC'),
       created_at   DateTime64(3, 'UTC')
@@ -114,6 +116,8 @@ async function createTables(): Promise<void> {
       type              String,
       severity          Int32,
       location          String,
+      latitude          Float64,
+      longitude         Float64,
       source_api        String,
       source_url        String,
       raw_payload       String,

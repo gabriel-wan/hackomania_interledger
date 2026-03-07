@@ -18,6 +18,8 @@ export async function registerMember(payload: MemberRegistrationPayload): Promis
     name: payload.name,
     email: payload.email,
     location: payload.location,
+    latitude: payload.latitude ?? 0,
+    longitude: payload.longitude ?? 0,
     consentGiven: payload.consentGiven,
     consentTimestamp: new Date().toISOString().replace("Z", ""),
     createdAt: new Date().toISOString().replace("Z", ""),
@@ -30,6 +32,8 @@ export async function registerMember(payload: MemberRegistrationPayload): Promis
       name: member.name,
       email: member.email,
       location: member.location,
+      latitude: member.latitude,
+      longitude: member.longitude,
       consent_given: member.consentGiven ? 1 : 0,
       consent_timestamp: member.consentTimestamp,
       created_at: member.createdAt,
@@ -59,10 +63,12 @@ export async function getMemberByWallet(walletAddress: string): Promise<Member |
   return rows[0] ? mapRow(rows[0]) : null;
 }
 
-export async function getMembersInRadius(_location: string, _radiusKm: number): Promise<Member[]> {
-  // TODO: Replace with real geospatial query once lat/lng fields are added.
+export async function getMembersInRadius(latitude: number, longitude: number, radiusKm: number): Promise<Member[]> {
   const result = await ch.query({
-    query: "SELECT * FROM members FINAL WHERE consent_given = 1",
+    query: `SELECT * FROM members FINAL
+            WHERE consent_given = 1
+              AND geoDistance({lng:Float64}, {lat:Float64}, longitude, latitude) / 1000 <= {radius:Float64}`,
+    query_params: { lat: latitude, lng: longitude, radius: radiusKm },
     format: "JSONEachRow",
   });
   const rows = await result.json<any>();
@@ -85,6 +91,8 @@ function mapRow(row: any): Member {
     name: row.name,
     email: row.email,
     location: row.location,
+    latitude: Number(row.latitude) || 0,
+    longitude: Number(row.longitude) || 0,
     consentGiven: Boolean(Number(row.consent_given)),
     consentTimestamp: row.consent_timestamp,
     createdAt: row.created_at,

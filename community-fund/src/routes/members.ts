@@ -17,6 +17,8 @@ export async function memberRoutes(app: FastifyInstance): Promise<void> {
       name: string;
       email: string;
       location: string;
+      latitude: number;
+      longitude: number;
       consentGiven: boolean;
     };
   }>("/members", async (req, reply) => {

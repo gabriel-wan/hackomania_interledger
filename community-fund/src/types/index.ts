@@ -12,7 +12,9 @@ export interface Member {
   walletAddress: string;       // Open Payments wallet address
   name: string;
   email: string;
-  location: string;            // Used for location-based disaster triggers
+  location: string;            // Human-readable location description
+  latitude: number;            // GPS latitude for geospatial queries
+  longitude: number;           // GPS longitude for geospatial queries
   consentGiven: boolean;       // GDPR-style consent for data processing
   consentTimestamp: string;
   createdAt: string;
@@ -23,6 +25,8 @@ export interface MemberRegistrationPayload {
   name: string;
   email: string;
   location: string;
+  latitude: number;
+  longitude: number;
   consentGiven: boolean;
 }
 
@@ -73,6 +77,8 @@ export interface DisasterSignal {
   type: DisasterType;
   severity: number;            // 1-10 scale
   location: string;
+  latitude: number;            // GPS latitude of disaster epicenter
+  longitude: number;           // GPS longitude of disaster epicenter
   sourceApi: string;           // e.g. "USGS", "WeatherGov"
   sourceUrl: string;           // Direct link to the raw signal for audit
   rawPayload: string;          // JSON stringified raw API response

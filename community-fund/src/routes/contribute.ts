@@ -73,6 +73,8 @@ export async function contributeRoutes(app: FastifyInstance): Promise<void> {
           name: senderName || "Anonymous",
           email: "",
           location: "",
+          latitude: 0,
+          longitude: 0,
           consentGiven: true,
         });
       }
