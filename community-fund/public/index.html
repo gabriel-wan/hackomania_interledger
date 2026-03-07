@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Community Fund Dashboard</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --surface: #1a1d27;
+      --border: #2a2d3a;
+      --text: #e1e4ed;
+      --muted: #8b8fa3;
+      --accent: #6c5ce7;
+      --accent-light: #a29bfe;
+      --green: #00b894;
+      --red: #e17055;
+      --orange: #fdcb6e;
+      --blue: #74b9ff;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+    }
+    header {
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      padding: 1rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    header h1 { font-size: 1.3rem; font-weight: 600; }
+    header h1 span { color: var(--accent-light); }
+    .status-dot {
+      width: 8px; height: 8px; border-radius: 50%;
+      background: var(--green); display: inline-block; margin-right: 8px;
+    }
+    .status-bar { display: flex; align-items: center; color: var(--muted); font-size: 0.85rem; }
+    .container { max-width: 1200px; margin: 0 auto; padding: 1.5rem; }
+
+    /* Navigation tabs */
+    .tabs {
+      display: flex; gap: 0.5rem; margin-bottom: 1.5rem;
+      border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;
+    }
+    .tab {
+      background: none; border: none; color: var(--muted);
+      padding: 0.5rem 1rem; cursor: pointer; font-size: 0.9rem;
+      border-radius: 6px 6px 0 0; transition: all 0.2s;
+    }
+    .tab:hover { color: var(--text); background: var(--surface); }
+    .tab.active { color: var(--accent-light); border-bottom: 2px solid var(--accent); }
+
+    /* Stats cards */
+    .stats-grid {
+      display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 1rem; margin-bottom: 1.5rem;
+    }
+    .stat-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; padding: 1.25rem;
+    }
+    .stat-card .label { font-size: 0.8rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; }
+    .stat-card .value { font-size: 1.8rem; font-weight: 700; margin-top: 0.3rem; }
+    .stat-card .sub { font-size: 0.8rem; color: var(--muted); margin-top: 0.25rem; }
+    .stat-card.accent .value { color: var(--accent-light); }
+    .stat-card.green .value { color: var(--green); }
+    .stat-card.orange .value { color: var(--orange); }
+    .stat-card.blue .value { color: var(--blue); }
+
+    /* Panels */
+    .panel {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 12px; margin-bottom: 1.5rem; overflow: hidden;
+    }
+    .panel-header {
+      padding: 1rem 1.25rem; border-bottom: 1px solid var(--border);
+      display: flex; justify-content: space-between; align-items: center;
+    }
+    .panel-header h2 { font-size: 1rem; font-weight: 600; }
+    .panel-body { padding: 1.25rem; }
+
+    /* Tables */
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; font-size: 0.75rem; text-transform: uppercase;
+      letter-spacing: 0.05em; color: var(--muted); padding: 0.6rem 0.75rem;
+      border-bottom: 1px solid var(--border);
+    }
+    td { padding: 0.7rem 0.75rem; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(108, 92, 231, 0.05); }
+
+    /* Badges */
+    .badge {
+      display: inline-block; padding: 0.2rem 0.6rem; border-radius: 20px;
+      font-size: 0.75rem; font-weight: 600;
+    }
+    .badge-green { background: rgba(0, 184, 148, 0.15); color: var(--green); }
+    .badge-orange { background: rgba(253, 203, 110, 0.15); color: var(--orange); }
+    .badge-red { background: rgba(225, 112, 85, 0.15); color: var(--red); }
+    .badge-blue { background: rgba(116, 185, 255, 0.15); color: var(--blue); }
+    .badge-muted { background: rgba(139, 143, 163, 0.15); color: var(--muted); }
+
+    /* Forms */
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .form-group { display: flex; flex-direction: column; gap: 0.3rem; }
+    .form-group.full { grid-column: 1 / -1; }
+    .form-group label { font-size: 0.8rem; color: var(--muted); }
+    input, select, textarea {
+      background: var(--bg); border: 1px solid var(--border); color: var(--text);
+      padding: 0.6rem 0.8rem; border-radius: 8px; font-size: 0.9rem;
+    }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
+    textarea { resize: vertical; min-height: 60px; }
+    .btn {
+      background: var(--accent); color: white; border: none;
+      padding: 0.6rem 1.2rem; border-radius: 8px; cursor: pointer;
+      font-size: 0.9rem; font-weight: 600; transition: opacity 0.2s;
+    }
+    .btn:hover { opacity: 0.85; }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+    .btn-sm { padding: 0.35rem 0.8rem; font-size: 0.8rem; }
+    .btn-green { background: var(--green); }
+    .btn-red { background: var(--red); }
+    .btn-row { display: flex; gap: 0.5rem; }
+    .actions { display: flex; gap: 0.5rem; justify-content: flex-end; margin-top: 1rem; }
+
+    /* Section visibility */
+    .section { display: none; }
+    .section.active { display: block; }
+
+    /* Toast */
+    .toast {
+      position: fixed; bottom: 1.5rem; right: 1.5rem; background: var(--surface);
+      border: 1px solid var(--border); padding: 0.8rem 1.2rem; border-radius: 10px;
+      font-size: 0.9rem; z-index: 100; opacity: 0; transition: opacity 0.3s;
+      max-width: 350px;
+    }
+    .toast.show { opacity: 1; }
+    .toast.error { border-color: var(--red); }
+
+    .empty { text-align: center; color: var(--muted); padding: 2rem; font-size: 0.9rem; }
+    .severity { font-weight: 700; }
+    .severity-high { color: var(--red); }
+    .severity-med { color: var(--orange); }
+    .severity-low { color: var(--green); }
+
+    @media (max-width: 768px) {
+      .form-grid { grid-template-columns: 1fr; }
+      .stats-grid { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1><span>&#9679;</span> Community Fund</h1>
+    <div class="status-bar">
+      <span class="status-dot" id="statusDot"></span>
+      <span id="statusText">Connecting...</span>
+    </div>
+  </header>
+
+  <div class="container">
+    <div class="tabs">
+      <button class="tab active" data-tab="overview">Overview</button>
+      <button class="tab" data-tab="members">Members</button>
+      <button class="tab" data-tab="governance">Governance</button>
+      <button class="tab" data-tab="signals">Disaster Signals</button>
+      <button class="tab" data-tab="audit">Audit Log</button>
+    </div>
+
+    <!-- Overview -->
+    <div class="section active" id="sec-overview">
+      <div class="stats-grid">
+        <div class="stat-card accent">
+          <div class="label">Fund Balance</div>
+          <div class="value" id="fundBalance">--</div>
+          <div class="sub" id="fundCurrency"></div>
+        </div>
+        <div class="stat-card blue">
+          <div class="label">Total Members</div>
+          <div class="value" id="memberCount">--</div>
+        </div>
+        <div class="stat-card green">
+          <div class="label">Contributions</div>
+          <div class="value" id="contribCount">--</div>
+          <div class="sub" id="contribTotal"></div>
+        </div>
+        <div class="stat-card orange">
+          <div class="label">Payouts</div>
+          <div class="value" id="payoutCount">--</div>
+          <div class="sub" id="payoutTotal"></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header"><h2>Recent Payouts</h2></div>
+        <div class="panel-body">
+          <table>
+            <thead><tr><th>Amount</th><th>Disaster</th><th>Location</th><th>Method</th><th>Date</th></tr></thead>
+            <tbody id="recentPayouts"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Members -->
+    <div class="section" id="sec-members">
+      <div class="panel">
+        <div class="panel-header">
+          <h2>Register New Member</h2>
+        </div>
+        <div class="panel-body">
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Name</label>
+              <input id="memName" placeholder="Full name" />
+            </div>
+            <div class="form-group">
+              <label>Email</label>
+              <input id="memEmail" type="email" placeholder="email@example.com" />
+            </div>
+            <div class="form-group">
+              <label>Wallet Address</label>
+              <input id="memWallet" placeholder="https://ilp.example/user" />
+            </div>
+            <div class="form-group">
+              <label>Location</label>
+              <input id="memLocation" placeholder="City, Country" />
+            </div>
+          </div>
+          <div class="actions">
+            <button class="btn" onclick="registerMember()">Register Member</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Governance -->
+    <div class="section" id="sec-governance">
+      <div class="panel">
+        <div class="panel-header">
+          <h2>Create Proposal</h2>
+        </div>
+        <div class="panel-body">
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Title</label>
+              <input id="propTitle" placeholder="Proposal title" />
+            </div>
+            <div class="form-group">
+              <label>Type</label>
+              <select id="propType">
+                <option value="rule_change">Rule Change</option>
+                <option value="threshold_change">Threshold Change</option>
+                <option value="general">General</option>
+              </select>
+            </div>
+            <div class="form-group full">
+              <label>Description</label>
+              <textarea id="propDesc" placeholder="Describe the proposal"></textarea>
+            </div>
+            <div class="form-group">
+              <label>Proposed By (Member ID)</label>
+              <input id="propBy" placeholder="member-uuid" />
+            </div>
+            <div class="form-group">
+              <label>Expires In (hours)</label>
+              <input id="propExpiry" type="number" value="48" />
+            </div>
+          </div>
+          <div class="actions">
+            <button class="btn" onclick="createProposal()">Submit Proposal</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-header"><h2>Open Proposals</h2>
+          <button class="btn btn-sm" onclick="loadProposals()">Refresh</button>
+        </div>
+        <div class="panel-body">
+          <table>
+            <thead><tr><th>Title</th><th>Type</th><th>Votes (Y/N/A)</th><th>Expires</th><th>Actions</th></tr></thead>
+            <tbody id="proposalList"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Signals -->
+    <div class="section" id="sec-signals">
+      <div class="panel">
+        <div class="panel-header"><h2>Recent Disaster Signals</h2>
+          <button class="btn btn-sm" onclick="loadSignals()">Refresh</button>
+        </div>
+        <div class="panel-body">
+          <table>
+            <thead><tr><th>Type</th><th>Severity</th><th>Location</th><th>Source</th><th>Verified</th><th>Detected</th></tr></thead>
+            <tbody id="signalList"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- Audit -->
+    <div class="section" id="sec-audit">
+      <div class="stats-grid" style="grid-template-columns: 1fr 1fr;">
+        <div class="stat-card">
+          <div class="label">Chain Root Hash</div>
+          <div class="value" style="font-size: 0.85rem; word-break: break-all; font-family: monospace;" id="rootHash">--</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Chain Integrity</div>
+          <div class="value" id="chainStatus">--</div>
+          <div class="sub" id="chainDetail"></div>
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-header"><h2>Event Log</h2>
+          <button class="btn btn-sm" onclick="loadAudit()">Refresh</button>
+        </div>
+        <div class="panel-body">
+          <table>
+            <thead><tr><th>Type</th><th>Payload</th><th>Tx ID</th><th>Time</th></tr></thead>
+            <tbody id="auditList"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+    const API = '';
+
+    // Tabs
+    document.querySelectorAll('.tab').forEach(tab => {
+      tab.addEventListener('click', () => {
+        document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+        document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+        tab.classList.add('active');
+        document.getElementById('sec-' + tab.dataset.tab).classList.add('active');
+        loadSection(tab.dataset.tab);
+      });
+    });
+
+    function loadSection(name) {
+      const loaders = { overview: loadDashboard, governance: loadProposals, signals: loadSignals, audit: loadAudit };
+      if (loaders[name]) loaders[name]();
+    }
+
+    // Toast
+    function toast(msg, isError) {
+      const el = document.getElementById('toast');
+      el.textContent = msg;
+      el.className = 'toast show' + (isError ? ' error' : '');
+      setTimeout(() => el.className = 'toast', 3000);
+    }
+
+    async function api(path, opts) {
+      try {
+        const res = await fetch(API + path, opts);
+        const json = await res.json();
+        if (!res.ok) throw new Error(json.error || json.message || 'Request failed');
+        return json;
+      } catch (e) {
+        toast(e.message, true);
+        throw e;
+      }
+    }
+
+    // Dashboard
+    async function loadDashboard() {
+      try {
+        const { data } = await api('/dashboard/public');
+        document.getElementById('fundBalance').textContent = formatAmount(data.fund.balance);
+        document.getElementById('fundCurrency').textContent = data.fund.currency;
+        document.getElementById('memberCount').textContent = data.members.total;
+        document.getElementById('contribCount').textContent = data.contributions.count;
+        document.getElementById('contribTotal').textContent = formatAmount(data.contributions.total) + ' total';
+        document.getElementById('payoutCount').textContent = data.payouts.count;
+        document.getElementById('payoutTotal').textContent = formatAmount(data.payouts.total) + ' total';
+
+        const tbody = document.getElementById('recentPayouts');
+        if (!data.recentPayouts || data.recentPayouts.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="5" class="empty">No payouts yet</td></tr>';
+        } else {
+          tbody.innerHTML = data.recentPayouts.map(p => `
+            <tr>
+              <td>${formatAmount(p.amount)} ${p.currency}</td>
+              <td><span class="badge badge-red">${p.disaster_type}</span></td>
+              <td>${esc(p.location)}</td>
+              <td>${esc(p.distribution_method)}</td>
+              <td>${formatDate(p.created_at)}</td>
+            </tr>
+          `).join('');
+        }
+
+        document.getElementById('statusDot').style.background = 'var(--green)';
+        document.getElementById('statusText').textContent = 'Connected';
+      } catch {
+        document.getElementById('statusDot').style.background = 'var(--red)';
+        document.getElementById('statusText').textContent = 'Error';
+      }
+    }
+
+    // Members
+    async function registerMember() {
+      const body = {
+        name: document.getElementById('memName').value,
+        email: document.getElementById('memEmail').value,
+        walletAddress: document.getElementById('memWallet').value,
+        location: document.getElementById('memLocation').value,
+        consentGiven: true,
+      };
+      if (!body.name || !body.email || !body.walletAddress) {
+        return toast('Name, email, and wallet are required', true);
+      }
+      const { data } = await api('/members', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      toast('Member registered: ' + data.id);
+      document.getElementById('memName').value = '';
+      document.getElementById('memEmail').value = '';
+      document.getElementById('memWallet').value = '';
+      document.getElementById('memLocation').value = '';
+    }
+
+    // Governance
+    async function loadProposals() {
+      const { data } = await api('/governance/proposals');
+      const tbody = document.getElementById('proposalList');
+      const proposals = Array.isArray(data) ? data : [];
+      if (proposals.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="5" class="empty">No open proposals</td></tr>';
+        return;
+      }
+      tbody.innerHTML = proposals.map(p => `
+        <tr>
+          <td>${esc(p.title)}<br><small style="color:var(--muted)">${p.id.slice(0, 8)}...</small></td>
+          <td><span class="badge badge-blue">${esc(p.type)}</span></td>
+          <td>${p.votesYes} / ${p.votesNo} / ${p.votesAbstain}</td>
+          <td>${formatDate(p.expiresAt)}</td>
+          <td>
+            <div class="btn-row">
+              <button class="btn btn-sm btn-green" onclick="vote('${p.id}','yes')">Yes</button>
+              <button class="btn btn-sm btn-red" onclick="vote('${p.id}','no')">No</button>
+            </div>
+          </td>
+        </tr>
+      `).join('');
+    }
+
+    async function createProposal() {
+      const body = {
+        type: document.getElementById('propType').value,
+        title: document.getElementById('propTitle').value,
+        description: document.getElementById('propDesc').value,
+        proposedBy: document.getElementById('propBy').value,
+        payload: {},
+        expiresInHours: Number(document.getElementById('propExpiry').value) || 48,
+      };
+      if (!body.title || !body.proposedBy) {
+        return toast('Title and proposer required', true);
+      }
+      await api('/governance/proposals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      toast('Proposal created');
+      document.getElementById('propTitle').value = '';
+      document.getElementById('propDesc').value = '';
+      loadProposals();
+    }
+
+    async function vote(proposalId, choice) {
+      const memberId = prompt('Enter your Member ID to vote:');
+      if (!memberId) return;
+      await api('/governance/proposals/' + proposalId + '/vote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ memberId, choice }),
+      });
+      toast('Vote cast: ' + choice);
+      loadProposals();
+    }
+
+    // Signals
+    async function loadSignals() {
+      const { data } = await api('/dashboard/signals');
+      const tbody = document.getElementById('signalList');
+      const signals = Array.isArray(data) ? data : [];
+      if (signals.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" class="empty">No signals detected</td></tr>';
+        return;
+      }
+      tbody.innerHTML = signals.map(s => {
+        const sevClass = s.severity >= 7 ? 'severity-high' : s.severity >= 5 ? 'severity-med' : 'severity-low';
+        return `
+          <tr>
+            <td><span class="badge badge-red">${esc(s.type)}</span></td>
+            <td><span class="severity ${sevClass}">${s.severity}/10</span></td>
+            <td>${esc(s.location)}</td>
+            <td>${esc(s.source_api)}</td>
+            <td>${s.verified ? '<span class="badge badge-green">Verified</span>' : '<span class="badge badge-muted">Unverified</span>'}</td>
+            <td>${formatDate(s.detected_at)}</td>
+          </tr>
+        `;
+      }).join('');
+    }
+
+    // Audit
+    async function loadAudit() {
+      try {
+        const [eventsRes, hashRes, verifyRes] = await Promise.all([
+          api('/audit/events?limit=50'),
+          api('/audit/root-hash'),
+          api('/audit/verify'),
+        ]);
+
+        document.getElementById('rootHash').textContent = hashRes.data.rootHash || 'No events';
+
+        const v = verifyRes.data;
+        document.getElementById('chainStatus').textContent = v.valid ? 'VALID' : 'BROKEN';
+        document.getElementById('chainStatus').style.color = v.valid ? 'var(--green)' : 'var(--red)';
+        document.getElementById('chainDetail').textContent = v.valid
+          ? `${v.count} events verified`
+          : `Broken at event ${v.brokenAtId}`;
+
+        const tbody = document.getElementById('auditList');
+        const events = Array.isArray(eventsRes.data) ? eventsRes.data : [];
+        if (events.length === 0) {
+          tbody.innerHTML = '<tr><td colspan="4" class="empty">No events</td></tr>';
+          return;
+        }
+        tbody.innerHTML = events.map(e => `
+          <tr>
+            <td><span class="badge badge-blue">${esc(e.type)}</span></td>
+            <td style="max-width:300px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:0.8rem;font-family:monospace">${esc(e.payload)}</td>
+            <td style="font-size:0.8rem">${e.op_tx_id || '-'}</td>
+            <td>${formatDate(e.timestamp)}</td>
+          </tr>
+        `).join('');
+      } catch {}
+    }
+
+    // Helpers
+    function formatAmount(v) {
+      return Number(v || 0).toLocaleString();
+    }
+    function formatDate(d) {
+      if (!d) return '-';
+      return new Date(d).toLocaleString();
+    }
+    function esc(s) {
+      if (!s) return '';
+      const el = document.createElement('span');
+      el.textContent = String(s);
+      return el.innerHTML;
+    }
+
+    // Init
+    loadDashboard();
+  </script>
+</body>
+</html>

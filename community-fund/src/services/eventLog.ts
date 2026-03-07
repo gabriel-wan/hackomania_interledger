@@ -19,7 +19,7 @@ export async function logEvent(params: {
 }): Promise<AuditEvent> {
   const prevEvent = await getLatestEvent();
   const prevHash = prevEvent?.hash ?? "0".repeat(64);
-  const timestamp = new Date().toISOString();
+  const timestamp = new Date().toISOString().replace("Z", "");
   const payloadStr = JSON.stringify(params.payload);
 
   const hash = createHash("sha256")

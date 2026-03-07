@@ -9,14 +9,15 @@
     "start": "node dist/server.js"
   },
   "dependencies": {
-    "@interledger/open-payments": "^6.0.0",
-    "fastify": "^4.0.0",
+    "@clickhouse/client": "^1.0.0",
     "@fastify/cors": "^8.0.0",
     "@fastify/jwt": "^7.0.0",
-    "@clickhouse/client": "^1.0.0",
-    "dotenv": "^16.0.0",
+    "@fastify/static": "^7.0.4",
+    "@interledger/open-payments": "^6.0.0",
     "axios": "^1.6.0",
-    "crypto": "^1.0.1"
+    "crypto": "^1.0.1",
+    "dotenv": "^16.0.0",
+    "fastify": "^4.0.0"
   },
   "devDependencies": {
     "@types/node": "^20.0.0",

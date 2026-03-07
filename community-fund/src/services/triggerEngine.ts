@@ -16,7 +16,7 @@ import axios from "axios";
 import { randomUUID } from "crypto";
 import { config } from "../config";
 import { DisasterSignal, DisasterType } from "../types";
-import { db } from "../db/schema";
+import { ch } from "../db/clickhouse";
 import { verifySignalWithAI } from "./aiVerification";
 import { logEvent } from "./eventLog";
 import { runRuleEngine } from "./ruleEngine";
@@ -133,14 +133,22 @@ async function processSignal(signal: DisasterSignal): Promise<void> {
   }
 
   // Persist the signal
-  db.prepare(`
-    INSERT INTO disaster_signals
-      (id, type, severity, location, source_api, source_url, raw_payload,
-       verified, verification_note, detected_at)
-    VALUES
-      (@id, @type, @severity, @location, @sourceApi, @sourceUrl, @rawPayload,
-       @verified, @verificationNote, @detectedAt)
-  `).run({ ...signal, verified: signal.verified ? 1 : 0 });
+  await ch.insert({
+    table: "disaster_signals",
+    values: [{
+      id: signal.id,
+      type: signal.type,
+      severity: signal.severity,
+      location: signal.location,
+      source_api: signal.sourceApi,
+      source_url: signal.sourceUrl,
+      raw_payload: signal.rawPayload,
+      verified: signal.verified ? 1 : 0,
+      verification_note: signal.verificationNote,
+      detected_at: signal.detectedAt.replace("Z", ""),
+    }],
+    format: "JSONEachRow",
+  });
 
   await logEvent({
     type: "disaster_signal_detected",
