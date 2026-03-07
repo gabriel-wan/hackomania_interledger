@@ -95,7 +95,8 @@ export type DistributionMethod =
   | "equal_split"
   | "severity_based"
   | "household_size"
-  | "capped_payout";
+  | "capped_payout"
+  | "proximity_weighted";
 
 export interface PayoutRule {
   id: string;

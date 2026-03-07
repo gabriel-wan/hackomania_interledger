@@ -12,7 +12,7 @@
 
 import { randomUUID } from "crypto";
 import { ch } from "../db/clickhouse";
-import { DisasterSignal, Payout, PayoutRule } from "../types";
+import { DisasterSignal, Member, Payout, PayoutRule } from "../types";
 import { getMembersInRadius } from "../db/memberRegistry";
 import { debitFund, getBalance } from "../db/fundPool";
 import {
@@ -76,8 +76,8 @@ export async function runRuleEngine(signal: DisasterSignal): Promise<RuleEngineR
   const payoutAmounts = calculatePayouts(
     rule,
     pool.totalBalance,
-    eligibleMembers.length,
-    signal.severity
+    eligibleMembers,
+    signal
   );
 
   await logEvent({
@@ -132,10 +132,11 @@ export async function runRuleEngine(signal: DisasterSignal): Promise<RuleEngineR
 function calculatePayouts(
   rule: PayoutRule,
   totalBalance: number,
-  memberCount: number,
-  severity: number
+  members: Member[],
+  signal: DisasterSignal
 ): { perMember: number[]; total: number } {
   const cap = rule.maxPayoutPerMember;
+  const memberCount = members.length;
   let amounts: number[] = [];
 
   switch (rule.distributionMethod) {
@@ -146,7 +147,7 @@ function calculatePayouts(
     }
     case "severity_based": {
       // Scale payout linearly with severity (1-10)
-      const factor = severity / 10;
+      const factor = signal.severity / 10;
       const perMember = Math.min(Math.floor((totalBalance / memberCount) * factor), cap);
       amounts = Array(memberCount).fill(perMember);
       break;
@@ -155,6 +156,21 @@ function calculatePayouts(
       // Each member gets exactly the cap, or their share if insufficient funds
       const perMember = Math.min(cap, Math.floor(totalBalance / memberCount));
       amounts = Array(memberCount).fill(perMember);
+      break;
+    }
+    case "proximity_weighted": {
+      // Inverse-distance weighting: members closer to epicenter get more
+      const distances = members.map((m) => {
+        const d = geoDistanceKm(signal.latitude, signal.longitude, m.latitude, m.longitude);
+        return Math.max(d, 0.1); // floor at 100m to avoid division by zero
+      });
+      const weights = distances.map((d) => 1 / d);
+      const totalWeight = weights.reduce((sum, w) => sum + w, 0);
+
+      amounts = weights.map((w) => {
+        const share = Math.floor((w / totalWeight) * totalBalance);
+        return Math.min(share, cap);
+      });
       break;
     }
     case "household_size": {
@@ -172,6 +188,18 @@ function calculatePayouts(
     perMember: amounts,
     total: amounts.reduce((sum, a) => sum + a, 0),
   };
+}
+
+/** Haversine distance in km between two lat/lng points */
+function geoDistanceKm(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371; // Earth radius in km
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
 async function dispatchPayout(params: {
