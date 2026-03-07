@@ -98,6 +98,8 @@ export async function testRoutes(app: FastifyInstance): Promise<void> {
         name: "Test Member",
         email: "",
         location: "",
+        latitude: 0,
+        longitude: 0,
         consentGiven: true,
       });
     }
@@ -107,6 +109,8 @@ export async function testRoutes(app: FastifyInstance): Promise<void> {
       type: (req.body?.type ?? "earthquake") as any,
       severity: req.body?.severity ?? 7,
       location: req.body?.location ?? "Test Location",
+      latitude: 0,
+      longitude: 0,
       sourceApi: "test",
       sourceUrl: "",
       rawPayload: "{}",
@@ -123,6 +127,8 @@ export async function testRoutes(app: FastifyInstance): Promise<void> {
         type: signal.type,
         severity: signal.severity,
         location: signal.location,
+        latitude: signal.latitude,
+        longitude: signal.longitude,
         source_api: signal.sourceApi,
         source_url: signal.sourceUrl,
         raw_payload: signal.rawPayload,
@@ -178,6 +184,8 @@ export async function testRoutes(app: FastifyInstance): Promise<void> {
         name: "Test Member",
         email: "",
         location: "",
+        latitude: 0,
+        longitude: 0,
         consentGiven: true,
       });
       steps.push(`Test member seeded: ${recipientWallet}`);
@@ -210,6 +218,8 @@ export async function testRoutes(app: FastifyInstance): Promise<void> {
       type: "earthquake",
       severity: 7,
       location: "Test Location",
+      latitude: 0,
+      longitude: 0,
       sourceApi: "test",
       sourceUrl: "",
       rawPayload: "{}",
@@ -225,6 +235,8 @@ export async function testRoutes(app: FastifyInstance): Promise<void> {
         type: signal.type,
         severity: signal.severity,
         location: signal.location,
+        latitude: signal.latitude,
+        longitude: signal.longitude,
         source_api: signal.sourceApi,
         source_url: signal.sourceUrl,
         raw_payload: signal.rawPayload,

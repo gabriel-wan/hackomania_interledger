@@ -66,7 +66,7 @@ export async function runRuleEngine(signal: DisasterSignal): Promise<RuleEngineR
     return { skipped: `Severity ${signal.severity} < threshold ${rule.minSeverityThreshold}`, payouts: [] };
   }
 
-  const eligibleMembers = await getMembersInRadius(signal.location, rule.eligibilityRadiusKm);
+  const eligibleMembers = await getMembersInRadius(signal.latitude, signal.longitude, rule.eligibilityRadiusKm);
   if (eligibleMembers.length === 0) {
     console.log("[RuleEngine] No eligible members in affected area.");
     return { skipped: "No eligible members", payouts: [] };

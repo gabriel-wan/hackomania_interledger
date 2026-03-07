@@ -36,6 +36,8 @@ async function fetchUSGSEarthquakes(minMagnitude = 5.0): Promise<DisasterSignal[
     type: "earthquake" as DisasterType,
     severity: Math.min(10, Math.round(f.properties.mag)),
     location: f.properties.place ?? "Unknown",
+    latitude: f.geometry?.coordinates?.[1] ?? 0,
+    longitude: f.geometry?.coordinates?.[0] ?? 0,
     sourceApi: "USGS",
     sourceUrl: f.properties.url,
     rawPayload: JSON.stringify(f),
@@ -52,18 +54,34 @@ async function fetchWeatherAlerts(): Promise<DisasterSignal[]> {
   });
   const features = response.data?.features ?? [];
 
-  return features.map((f: any): DisasterSignal => ({
-    id: randomUUID(),
-    type: mapWeatherEventType(f.properties.event),
-    severity: mapWeatherSeverity(f.properties.severity),
-    location: f.properties.areaDesc ?? "Unknown",
-    sourceApi: "NWS",
-    sourceUrl: `https://api.weather.gov/alerts/${f.properties.id}`,
-    rawPayload: JSON.stringify(f),
-    verified: false,
-    verificationNote: "",
-    detectedAt: new Date().toISOString(),
-  }));
+  return features.map((f: any): DisasterSignal => {
+    // NWS geometry is a Polygon — compute centroid from coordinate ring
+    let lat = 0, lng = 0;
+    const coords = f.geometry?.coordinates?.[0];
+    if (Array.isArray(coords) && coords.length > 0) {
+      for (const [cLng, cLat] of coords) {
+        lng += cLng;
+        lat += cLat;
+      }
+      lng /= coords.length;
+      lat /= coords.length;
+    }
+
+    return {
+      id: randomUUID(),
+      type: mapWeatherEventType(f.properties.event),
+      severity: mapWeatherSeverity(f.properties.severity),
+      location: f.properties.areaDesc ?? "Unknown",
+      latitude: lat,
+      longitude: lng,
+      sourceApi: "NWS",
+      sourceUrl: `https://api.weather.gov/alerts/${f.properties.id}`,
+      rawPayload: JSON.stringify(f),
+      verified: false,
+      verificationNote: "",
+      detectedAt: new Date().toISOString(),
+    };
+  });
 }
 
 function mapWeatherEventType(event: string): DisasterType {
@@ -140,6 +158,8 @@ async function processSignal(signal: DisasterSignal): Promise<void> {
       type: signal.type,
       severity: signal.severity,
       location: signal.location,
+      latitude: signal.latitude,
+      longitude: signal.longitude,
       source_api: signal.sourceApi,
       source_url: signal.sourceUrl,
       raw_payload: signal.rawPayload,
