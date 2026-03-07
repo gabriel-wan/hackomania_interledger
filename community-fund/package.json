@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
     "build": "tsc",
-    "start": "node dist/server.js"
+    "start": "node dist/server.js",
+    "seed": "ts-node --transpile-only scripts/seed-members.ts"
   },
   "dependencies": {
     "@clickhouse/client": "^1.0.0",
