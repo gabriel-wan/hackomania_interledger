@@ -14,6 +14,8 @@ import { randomUUID } from "crypto";
 import { ch } from "../db/clickhouse";
 import { runRuleEngine, getActiveRule } from "../services/ruleEngine";
 import { logEvent } from "../services/eventLog";
+import { getMemberByWallet, registerMember } from "../db/memberRegistry";
+import { config } from "../config";
 import { DisasterSignal } from "../types";
 
 export async function testRoutes(app: FastifyInstance): Promise<void> {
@@ -83,8 +85,23 @@ export async function testRoutes(app: FastifyInstance): Promise<void> {
       type?: string;
       severity?: number;
       location?: string;
+      /** Wallet address to receive the payout. Defaults to the fund wallet (self-loop for testing). */
+      recipientWalletAddress?: string;
     };
   }>("/test/trigger-payout", async (req, reply) => {
+    // Ensure at least one member exists so the rule engine has someone to pay
+    const recipientWallet = req.body?.recipientWalletAddress ?? config.openPayments.walletAddress;
+    let member = await getMemberByWallet(recipientWallet);
+    if (!member) {
+      member = await registerMember({
+        walletAddress: recipientWallet,
+        name: "Test Member",
+        email: "",
+        location: "",
+        consentGiven: true,
+      });
+    }
+
     const signal: DisasterSignal = {
       id: randomUUID(),
       type: (req.body?.type ?? "earthquake") as any,
@@ -117,13 +134,13 @@ export async function testRoutes(app: FastifyInstance): Promise<void> {
     });
 
     // Run through the rule engine
-    await runRuleEngine(signal);
+    const engineResult = await runRuleEngine(signal);
 
-    return reply.send({ success: true, message: "Signal processed", data: { signalId: signal.id } });
+    return reply.send({ success: true, message: "Signal processed", data: { signalId: signal.id, engineResult } });
   });
 
   /** Full flow: seed rule + fund + trigger payout in one call */
-  app.post("/test/full-flow", async (_req, reply) => {
+  app.post<{ Body?: { recipientWalletAddress?: string } }>("/test/full-flow", async (req, reply) => {
     const steps: string[] = [];
 
     // 1. Seed rule if needed
@@ -152,13 +169,29 @@ export async function testRoutes(app: FastifyInstance): Promise<void> {
       steps.push("Payout rule already exists");
     }
 
-    // 2. Add fund balance
+    // 2. Ensure a test member exists so the rule engine has someone to pay
+    const recipientWallet = req.body?.recipientWalletAddress ?? config.openPayments.walletAddress;
+    let member = await getMemberByWallet(recipientWallet);
+    if (!member) {
+      member = await registerMember({
+        walletAddress: recipientWallet,
+        name: "Test Member",
+        email: "",
+        location: "",
+        consentGiven: true,
+      });
+      steps.push(`Test member seeded: ${recipientWallet}`);
+    } else {
+      steps.push(`Test member already exists: ${recipientWallet}`);
+    }
+
+    // 3. Add fund balance
     const now = new Date().toISOString().replace("Z", "");
     await ch.insert({
       table: "contributions",
       values: [{
         id: randomUUID(),
-        member_id: "test-seed",
+        member_id: member.id,
         amount: 100000,
         currency: "USD",
         frequency: "one-off",
@@ -171,7 +204,7 @@ export async function testRoutes(app: FastifyInstance): Promise<void> {
     });
     steps.push("Fund credited with 100000");
 
-    // 3. Trigger disaster signal
+    // 4. Trigger disaster signal
     const signal: DisasterSignal = {
       id: randomUUID(),
       type: "earthquake",
@@ -203,14 +236,18 @@ export async function testRoutes(app: FastifyInstance): Promise<void> {
     });
     steps.push("Disaster signal created");
 
-    // 4. Run rule engine
+    // 5. Run rule engine
+    let engineResult;
     try {
-      await runRuleEngine(signal);
-      steps.push("Rule engine executed");
+      engineResult = await runRuleEngine(signal);
+      const succeeded = engineResult.payouts.filter(p => p.status === "ok").length;
+      const failed = engineResult.payouts.filter(p => p.status === "failed").length;
+      steps.push(`Rule engine executed: ${succeeded} payouts succeeded, ${failed} failed`);
+      if (engineResult.skipped) steps.push(`Skipped: ${engineResult.skipped}`);
     } catch (err: any) {
-      steps.push("Rule engine error: " + err.message);
+      steps.push("Rule engine threw: " + (err?.description ?? err?.message));
     }
 
-    return reply.send({ success: true, steps, rule, signalId: signal.id });
+    return reply.send({ success: true, steps, rule, signalId: signal.id, engineResult });
   });
 }

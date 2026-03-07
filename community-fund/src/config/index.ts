@@ -48,6 +48,13 @@ export const config = {
     jwtSecret: requireEnv("JWT_SECRET", "dev-secret-change-in-prod"),
   },
 
+  /**
+   * When true, payouts are recorded in the DB but the actual Open Payments
+   * ILP transfer is skipped. Needed because ilp.interledger-test.dev enforces
+   * interactive grants for outgoing payments (no non-interactive support).
+   */
+  simulatePayouts: process.env.SIMULATE_PAYOUTS === "true",
+
   audit: {
     ipfsUrl: process.env.IPFS_API_URL ?? "",
     ipfsKey: process.env.IPFS_API_KEY ?? "",

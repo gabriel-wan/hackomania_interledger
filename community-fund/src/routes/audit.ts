@@ -33,7 +33,7 @@ export async function auditRoutes(app: FastifyInstance): Promise<void> {
 
       const result = await ch.query({
         query: `
-          SELECT * FROM audit_events ORDER BY timestamp ASC LIMIT {limit:UInt8} OFFSET {offset:UInt8}
+          SELECT * FROM audit_events ORDER BY timestamp ASC LIMIT {limit:UInt32} OFFSET {offset:UInt32}
         `,
         query_params: { limit, offset },
         format: "JSONEachRow",

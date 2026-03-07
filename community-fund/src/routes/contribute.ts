@@ -64,98 +64,118 @@ export async function contributeRoutes(app: FastifyInstance): Promise<void> {
 
     const client = getClient();
 
-    // Ensure sender is registered as a member
-    let member = await getMemberByWallet(senderWalletAddress);
-    if (!member) {
-      member = await registerMember({
-        walletAddress: senderWalletAddress,
-        name: senderName || "Anonymous",
-        email: "",
-        location: "",
-        consentGiven: true,
+    try {
+      // Ensure sender is registered as a member
+      let member = await getMemberByWallet(senderWalletAddress);
+      if (!member) {
+        member = await registerMember({
+          walletAddress: senderWalletAddress,
+          name: senderName || "Anonymous",
+          email: "",
+          location: "",
+          consentGiven: true,
+        });
+      }
+
+      // 1. Create incoming payment on the FUND wallet (to receive the money)
+      const { incomingPaymentId } = await createIncomingPayment({
+        amount,
+        currency,
+        memberId: member.id,
       });
-    }
 
-    // 1. Create incoming payment on the FUND wallet (to receive the money)
-    const { incomingPaymentId } = await createIncomingPayment({
-      amount,
-      currency,
-      memberId: member.id,
-    });
+      // 2. Get sender's wallet info
+      const senderWallet = await client.walletAddress.get({
+        url: senderWalletAddress,
+      });
 
-    // 2. Get sender's wallet info
-    const senderWallet = await client.walletAddress.get({
-      url: senderWalletAddress,
-    });
+      // 3. Request interactive grant on sender's wallet
+      const nonce = randomUUID();
+      const callbackUrl = `http://localhost:${config.server.port}/contribute/callback`;
 
-    // 3. Request interactive grant on sender's wallet
-    const nonce = randomUUID();
-    const callbackUrl = `http://localhost:${config.server.port}/contribute/callback`;
-
-    const grant = await client.grant.request(
-      { url: senderWallet.authServer },
-      {
-        access_token: {
-          access: [
-            {
-              type: "quote",
-              actions: ["create", "read"],
-            },
-            {
-              type: "outgoing-payment",
-              actions: ["create", "read"],
-              identifier: senderWalletAddress,
-              limits: {
-                debitAmount: {
-                  value: String(amount),
-                  assetCode: senderWallet.assetCode,
-                  assetScale: senderWallet.assetScale,
+      const grant = await client.grant.request(
+        { url: senderWallet.authServer },
+        {
+          access_token: {
+            access: [
+              {
+                type: "quote",
+                actions: ["create", "read"],
+              },
+              {
+                type: "outgoing-payment",
+                actions: ["create", "read"],
+                identifier: senderWalletAddress,
+                limits: {
+                  debitAmount: {
+                    value: String(amount),
+                    assetCode: senderWallet.assetCode,
+                    assetScale: senderWallet.assetScale,
+                  },
                 },
               },
-            },
-          ],
-        },
-        interact: {
-          start: ["redirect"],
-          finish: {
-            method: "redirect",
-            uri: callbackUrl,
-            nonce,
+            ],
           },
-        },
-      }
-    );
+          interact: {
+            start: ["redirect"],
+            finish: {
+              method: "redirect",
+              uri: callbackUrl,
+              nonce,
+            },
+          },
+        }
+      );
 
-    if (!isPendingGrant(grant)) {
+      if (!isPendingGrant(grant)) {
+        return reply.status(500).send({
+          success: false,
+          error: "Expected interactive grant but wallet returned non-interactive response.",
+        });
+      }
+
+      // 4. Store pending state for the callback
+      const contributionId = randomUUID();
+      pendingGrants.set(nonce, {
+        contributionId,
+        memberId: member.id,
+        amount,
+        currency,
+        incomingPaymentId,
+        continueUri: grant.continue.uri,
+        continueAccessToken: grant.continue.access_token.value,
+        senderWalletAddress,
+        nonce,
+        createdAt: Date.now(),
+      });
+
+      // 5. Return redirect URL — frontend will redirect the user here
+      return reply.send({
+        success: true,
+        data: {
+          redirectUrl: grant.interact.redirect,
+          contributionId,
+        },
+      });
+
+    } catch (err: any) {
+      const status = err?.status ?? err?.response?.status;
+      const message = err?.description ?? err?.message ?? "Unknown error";
+      const details = err?.validationErrors ?? err?.response?.data ?? null;
+
+      console.error("[Contribute] /contribute/start error:", {
+        status,
+        message,
+        details,
+        stack: err?.stack,
+      });
+
       return reply.status(500).send({
         success: false,
-        error: "Expected interactive grant but wallet returned non-interactive response.",
+        error: message,
+        ...(details ? { details } : {}),
       });
     }
-
-    // 4. Store pending state for the callback
-    const contributionId = randomUUID();
-    pendingGrants.set(nonce, {
-      contributionId,
-      memberId: member.id,
-      amount,
-      currency,
-      incomingPaymentId,
-      continueUri: grant.continue.uri,
-      continueAccessToken: grant.continue.access_token.value,
-      senderWalletAddress,
-      nonce,
-      createdAt: Date.now(),
-    });
-
-    // 5. Return redirect URL — frontend will redirect the user here
-    return reply.send({
-      success: true,
-      data: {
-        redirectUrl: grant.interact.redirect,
-        contributionId,
-      },
-    });
   });
 
   /**

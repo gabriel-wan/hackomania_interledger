@@ -24,6 +24,7 @@ import { auditRoutes } from "./routes/audit";
 import { dashboardRoutes } from "./routes/dashboard";
 import { testRoutes } from "./routes/test";
 import { contributeRoutes } from "./routes/contribute";
+import { adminRoutes } from "./routes/admin";
 
 const app = Fastify({ logger: true });
 
@@ -45,6 +46,7 @@ async function bootstrap(): Promise<void> {
   await app.register(dashboardRoutes);
   await app.register(testRoutes);
   await app.register(contributeRoutes);
+  await app.register(adminRoutes);
 
   // 5. Static files (after routes so API routes take priority)
   await app.register(fastifyStatic, {

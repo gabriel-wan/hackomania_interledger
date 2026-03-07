@@ -18,9 +18,11 @@ import { debitFund, getBalance } from "../db/fundPool";
 import {
   requestPayoutGrant,
   executeOutgoingPayment,
-  createIncomingPayment,
+  createIncomingPaymentOnWallet,
 } from "./payments";
 import { logEvent } from "./eventLog";
+import { config } from "../config";
+import { getPayoutToken } from "./payoutAuth";
 
 // ---------------------------------------------------------------------------
 // Rule retrieval
@@ -44,24 +46,30 @@ export async function getActiveRule(): Promise<PayoutRule | null> {
  * Loads the active rule, resolves eligible members, calculates amounts,
  * and dispatches Open Payments outgoing payments.
  */
-export async function runRuleEngine(signal: DisasterSignal): Promise<void> {
+export type RuleEngineResult = {
+  skipped?: string;
+  eligibleMembers?: number;
+  payouts: Array<{ memberId: string; amount: number; status: "ok" | "failed"; error?: string }>;
+};
+
+export async function runRuleEngine(signal: DisasterSignal): Promise<RuleEngineResult> {
   console.log(`[RuleEngine] Processing signal: ${signal.id}`);
 
   const rule = await getActiveRule();
   if (!rule) {
     console.warn("[RuleEngine] No active payout rule configured. Skipping.");
-    return;
+    return { skipped: "No active payout rule", payouts: [] };
   }
 
   if (signal.severity < rule.minSeverityThreshold) {
     console.log(`[RuleEngine] Signal severity ${signal.severity} below threshold ${rule.minSeverityThreshold}. Skipping.`);
-    return;
+    return { skipped: `Severity ${signal.severity} < threshold ${rule.minSeverityThreshold}`, payouts: [] };
   }
 
   const eligibleMembers = await getMembersInRadius(signal.location, rule.eligibilityRadiusKm);
   if (eligibleMembers.length === 0) {
     console.log("[RuleEngine] No eligible members in affected area.");
-    return;
+    return { skipped: "No eligible members", payouts: [] };
   }
 
   const pool = await getBalance();
@@ -83,10 +91,23 @@ export async function runRuleEngine(signal: DisasterSignal): Promise<void> {
     opTxId: null,
   });
 
+  const results: RuleEngineResult["payouts"] = [];
+
+  if (config.simulatePayouts) {
+    console.log("[RuleEngine] SIMULATE_PAYOUTS=true — skipping real ILP transfers, recording payouts in DB only.");
+  }
+
   // Dispatch individual payouts
   for (let i = 0; i < eligibleMembers.length; i++) {
     const member = eligibleMembers[i];
     const amount = payoutAmounts.perMember[i];
+
+    // Skip members with no valid wallet address
+    if (!member.walletAddress || !member.walletAddress.startsWith("http")) {
+      console.warn(`[RuleEngine] Skipping member ${member.id}: invalid wallet address "${member.walletAddress}"`);
+      results.push({ memberId: member.id, amount, status: "failed", error: "Invalid wallet address" });
+      continue;
+    }
 
     try {
       await dispatchPayout({
@@ -97,10 +118,15 @@ export async function runRuleEngine(signal: DisasterSignal): Promise<void> {
         amount,
         currency: pool.currency,
       });
-    } catch (err) {
-      console.error(`[RuleEngine] Payout failed for member ${member.id}:`, err);
+      results.push({ memberId: member.id, amount, status: "ok" });
+    } catch (err: any) {
+      const errMsg = err?.description ?? err?.message ?? String(err);
+      console.error(`[RuleEngine] Payout failed for member ${member.id}:`, errMsg, err?.validationErrors);
+      results.push({ memberId: member.id, amount, status: "failed", error: errMsg });
     }
   }
+
+  return { eligibleMembers: eligibleMembers.length, payouts: results };
 }
 
 function calculatePayouts(
@@ -158,33 +184,55 @@ async function dispatchPayout(params: {
 }): Promise<void> {
   const payoutId = randomUUID();
 
-  // Step 1: Create incoming payment on recipient's wallet
-  const { incomingPaymentId } = await createIncomingPayment({
-    amount: params.amount,
-    currency: params.currency,
-    memberId: params.memberId,
-  });
+  // Determine the access token to use for the outgoing payment
+  // Priority: pre-authorized cached token (from /admin/payout-auth-url flow)
+  //           → fallback to per-payout grant request (may fail on test wallet)
+  const cachedToken = getPayoutToken();
+  let accessToken: string;
+  let outgoingPaymentId: string;
 
-  // Step 2: Request grant from fund wallet to send
-  const { accessToken } = await requestPayoutGrant({
-    recipientWalletAddress: params.memberWalletAddress,
-    amount: params.amount,
-    currency: params.currency,
-  });
+  if (config.simulatePayouts) {
+    // Simulation mode: skip real ILP transfer, just record the payout
+    console.log(`[RuleEngine] SIMULATE: payout of ${params.amount} to ${params.memberWalletAddress}`);
+    outgoingPaymentId = "simulated-" + randomUUID();
+  } else {
+    // Step 1: Create incoming payment on recipient's wallet
+    const { incomingPaymentId } = await createIncomingPaymentOnWallet({
+      recipientWalletAddress: params.memberWalletAddress,
+      amount: params.amount,
+    });
 
-  // Step 3: Execute the outgoing payment
-  const { outgoingPaymentId } = await executeOutgoingPayment({
-    recipientWalletAddress: params.memberWalletAddress,
-    incomingPaymentId,
-    amount: params.amount,
-    currency: params.currency,
-    accessToken,
-    metadata: {
-      disasterSignalId: params.signal.id,
-      ruleId: params.rule.id,
-      payoutId,
-    },
-  });
+    // Step 2: Get an access token
+    if (cachedToken) {
+      // Use the pre-authorized token (cached after admin approves /admin/payout-auth-url)
+      accessToken = cachedToken;
+      console.log(`[RuleEngine] Using pre-authorized payout token for member ${params.memberId}`);
+    } else {
+      // Fall back to requesting a new grant per payout (will fail on test wallet without pre-auth)
+      console.warn("[RuleEngine] No pre-authorized payout token. Visit /admin/payout-auth-url to authorize payouts.");
+      const grant = await requestPayoutGrant({
+        recipientWalletAddress: params.memberWalletAddress,
+        amount: params.amount,
+        currency: params.currency,
+      });
+      accessToken = grant.accessToken;
+    }
+
+    // Step 3: Execute the outgoing payment (creates quote then outgoing payment)
+    const result = await executeOutgoingPayment({
+      recipientWalletAddress: params.memberWalletAddress,
+      incomingPaymentId,
+      amount: params.amount,
+      currency: params.currency,
+      accessToken,
+      metadata: {
+        disasterSignalId: params.signal.id,
+        ruleId: params.rule.id,
+        payoutId,
+      },
+    });
+    outgoingPaymentId = result.outgoingPaymentId;
+  }
 
   // Step 4: Debit the fund pool
   await debitFund(params.amount);

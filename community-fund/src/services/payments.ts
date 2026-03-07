@@ -51,6 +51,7 @@ export async function createIncomingPayment(params: {
   });
 
   // Request a non-interactive grant for incoming-payment on the fund wallet
+  // Note: no identifier field — the test wallet may reject it
   const grant = await client.grant.request(
     { url: walletAddress.authServer },
     {
@@ -58,8 +59,7 @@ export async function createIncomingPayment(params: {
         access: [
           {
             type: "incoming-payment",
-            actions: ["create", "read", "list"],
-            identifier: config.openPayments.walletAddress,
+            actions: ["create", "read", "complete"],
           },
         ],
       },
@@ -67,7 +67,7 @@ export async function createIncomingPayment(params: {
   );
 
   if (isPendingGrant(grant)) {
-    throw new Error("Expected non-interactive grant for incoming payment.");
+    throw new Error("Incoming payment grant requires interaction — check fund wallet setup.");
   }
 
   const incomingPayment = await client.incomingPayment.create(
@@ -87,6 +87,52 @@ export async function createIncomingPayment(params: {
     incomingPaymentId: incomingPayment.id,
     paymentUrl: incomingPayment.id,
   };
+}
+
+/**
+ * Creates an incoming payment on a RECIPIENT's wallet.
+ * Used for payouts — the fund sends money TO the member's wallet.
+ */
+export async function createIncomingPaymentOnWallet(params: {
+  recipientWalletAddress: string;
+  amount: number;
+}): Promise<{ incomingPaymentId: string }> {
+  const recipientWallet = await client.walletAddress.get({
+    url: params.recipientWalletAddress,
+  });
+
+  // Request a non-interactive grant from the recipient's auth server
+  const grant = await client.grant.request(
+    { url: recipientWallet.authServer },
+    {
+      access_token: {
+        access: [
+          {
+            type: "incoming-payment",
+            actions: ["create", "read", "complete"],
+          },
+        ],
+      },
+    }
+  );
+
+  if (isPendingGrant(grant)) {
+    throw new Error(`Recipient wallet requires interactive grant: ${params.recipientWalletAddress}`);
+  }
+
+  const incomingPayment = await client.incomingPayment.create(
+    { url: recipientWallet.resourceServer, accessToken: grant.access_token.value },
+    {
+      walletAddress: params.recipientWalletAddress,
+      incomingAmount: {
+        value: String(params.amount),
+        assetCode: recipientWallet.assetCode,
+        assetScale: recipientWallet.assetScale,
+      },
+    } as any
+  );
+
+  return { incomingPaymentId: incomingPayment.id };
 }
 
 /**
@@ -170,14 +216,19 @@ export async function requestPayoutGrant(params: {
       access_token: {
         access: [
           {
+            // Quote access is required before creating an outgoing payment
+            type: "quote",
+            actions: ["create", "read"],
+          },
+          {
             type: "outgoing-payment",
             actions: ["create", "read"],
             identifier: config.openPayments.walletAddress,
             limits: {
               debitAmount: {
                 value: String(params.amount),
-                assetCode: params.currency,
-                assetScale: 2,
+                assetCode: fundWallet.assetCode,
+                assetScale: fundWallet.assetScale,
               },
             },
           },
@@ -199,6 +250,7 @@ export async function requestPayoutGrant(params: {
 /**
  * Creates an outgoing payment from the fund to a recipient wallet.
  * Should be called after requestPayoutGrant returns an access token.
+ * Follows the same quote-first pattern as the interactive contribute flow.
  */
 export async function executeOutgoingPayment(params: {
   recipientWalletAddress: string;
@@ -212,6 +264,22 @@ export async function executeOutgoingPayment(params: {
     url: config.openPayments.walletAddress,
   });
 
+  // Step A: Create a quote (required by the test wallet before outgoing payment)
+  const quote = await client.quote.create(
+    {
+      url: fundWallet.resourceServer,
+      accessToken: params.accessToken,
+    },
+    {
+      walletAddress: config.openPayments.walletAddress,
+      receiver: params.incomingPaymentId,
+      method: "ilp",
+    } as any
+  );
+
+  console.log(`[Payments] Quote created for payout: ${quote.id}`);
+
+  // Step B: Create the outgoing payment using the quote
   const outgoingPayment = await client.outgoingPayment.create(
     {
       url: fundWallet.resourceServer,
@@ -219,14 +287,9 @@ export async function executeOutgoingPayment(params: {
     },
     {
       walletAddress: config.openPayments.walletAddress,
-      incomingPayment: params.incomingPaymentId,
-      debitAmount: {
-        value: String(params.amount),
-        assetCode: params.currency,
-        assetScale: 2,
-      },
+      quoteId: quote.id,
       metadata: params.metadata,
-    }
+    } as any
   );
 
   return { outgoingPaymentId: outgoingPayment.id };
