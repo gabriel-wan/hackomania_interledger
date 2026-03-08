@@ -16,6 +16,12 @@ import { setPayoutToken } from "../services/payoutAuth";
 
 export async function adminRoutes(app: FastifyInstance): Promise<void> {
 
+  // Register decorator at plugin time (before server starts) so it can be
+  // mutated later inside route handlers without triggering FST_ERR_DEC_AFTER_START.
+  if (!app.hasDecorator("_pendingPayoutGrant")) {
+    app.decorate("_pendingPayoutGrant", null as any);
+  }
+
   /**
    * GET /admin/payout-auth-url
    * Requests an interactive grant on the fund wallet for outgoing payments.
@@ -67,11 +73,11 @@ export async function adminRoutes(app: FastifyInstance): Promise<void> {
     }
 
     // Store continue info for callback
-    app.decorate("_pendingPayoutGrant", {
+    (app as any)._pendingPayoutGrant = {
       continueUri: grant.continue.uri,
       continueAccessToken: grant.continue.access_token.value,
       nonce,
-    });
+    };
 
     return reply.send({
       success: true,

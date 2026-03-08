@@ -32,6 +32,7 @@ const COUNT = parseInt(getArg("count", "500"));
 const CENTER_LAT = parseFloat(getArg("lat", "1.3521"));   // Singapore
 const CENTER_LNG = parseFloat(getArg("lng", "103.8198")); // Singapore
 const SPREAD = parseFloat(getArg("spread", "0.8"));       // ~80km radius
+const WALLET = getArg("wallet", "");                       // shared wallet for all seeded members
 const CLEAR = process.argv.includes("--clear");
 
 // ---------------------------------------------------------------------------
@@ -122,7 +123,9 @@ async function main() {
 
       rows.push({
         id: randomUUID(),
-        wallet_address: `https://ilp.interledger-test.dev/seed_${randomUUID().slice(0, 8)}`,
+        wallet_address: WALLET
+          ? `https://ilp.interledger-test.dev/${WALLET}`
+          : `https://ilp.interledger-test.dev/seed_${randomUUID().slice(0, 8)}`,
         name: `${firstName} ${lastName}`,
         email: `${firstName.toLowerCase()}.${lastName.toLowerCase()}${Math.floor(Math.random() * 999)}@example.com`,
         location: pick(LOCATIONS),

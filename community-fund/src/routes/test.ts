@@ -80,11 +80,22 @@ export async function testRoutes(app: FastifyInstance): Promise<void> {
   });
 
   /** Fire a fake disaster signal through the rule engine */
+  // Known city coordinates for test signals
+  const CITY_COORDS: Record<string, { lat: number; lng: number }> = {
+    singapore: { lat: 1.3521, lng: 103.8198 },
+    manila: { lat: 14.5995, lng: 120.9842 },
+    jakarta: { lat: -6.2088, lng: 106.8456 },
+    tokyo: { lat: 35.6762, lng: 139.6503 },
+    kathmandu: { lat: 27.7172, lng: 85.3240 },
+  };
+
   app.post<{
     Body: {
       type?: string;
       severity?: number;
       location?: string;
+      latitude?: number;
+      longitude?: number;
       /** Wallet address to receive the payout. Defaults to the fund wallet (self-loop for testing). */
       recipientWalletAddress?: string;
     };
@@ -104,13 +115,19 @@ export async function testRoutes(app: FastifyInstance): Promise<void> {
       });
     }
 
+    // Resolve coordinates: explicit body params > city lookup > fallback 0,0
+    const locationKey = (req.body?.location ?? "").toLowerCase();
+    const cityMatch = Object.entries(CITY_COORDS).find(([k]) => locationKey.includes(k));
+    const lat = req.body?.latitude ?? cityMatch?.[1].lat ?? 0;
+    const lng = req.body?.longitude ?? cityMatch?.[1].lng ?? 0;
+
     const signal: DisasterSignal = {
       id: randomUUID(),
       type: (req.body?.type ?? "earthquake") as any,
       severity: req.body?.severity ?? 7,
       location: req.body?.location ?? "Test Location",
-      latitude: 0,
-      longitude: 0,
+      latitude: lat,
+      longitude: lng,
       sourceApi: "test",
       sourceUrl: "",
       rawPayload: "{}",
@@ -212,14 +229,14 @@ export async function testRoutes(app: FastifyInstance): Promise<void> {
     });
     steps.push("Fund credited with 100000");
 
-    // 4. Trigger disaster signal
+    // 4. Trigger disaster signal (Singapore by default)
     const signal: DisasterSignal = {
       id: randomUUID(),
       type: "earthquake",
       severity: 7,
-      location: "Test Location",
-      latitude: 0,
-      longitude: 0,
+      location: "Singapore",
+      latitude: 1.3521,
+      longitude: 103.8198,
       sourceApi: "test",
       sourceUrl: "",
       rawPayload: "{}",

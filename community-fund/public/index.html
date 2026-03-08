@@ -412,7 +412,7 @@
         </div>
         <div class="panel-body">
           <table>
-            <thead><tr><th>Name</th><th>Wallet</th><th>Location</th><th>Lat/Lng</th><th>Registered</th></tr></thead>
+            <thead><tr><th>ID</th><th>Name</th><th>Wallet</th><th>Location</th><th>Lat/Lng</th><th>Registered</th></tr></thead>
             <tbody id="memberList"></tbody>
           </table>
         </div>
@@ -838,11 +838,12 @@
         const tbody = document.getElementById('memberList');
         const members = Array.isArray(data) ? data : [];
         if (members.length === 0) {
-          tbody.innerHTML = '<tr><td colspan="5" class="empty">No members registered</td></tr>';
+          tbody.innerHTML = '<tr><td colspan="6" class="empty">No members registered</td></tr>';
           return;
         }
         tbody.innerHTML = members.map(m => `
           <tr>
+            <td style="font-size:0.7rem;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;cursor:pointer" title="${esc(m.id)}" onclick="navigator.clipboard.writeText('${esc(m.id)}');this.style.color='#a78bfa';setTimeout(()=>this.style.color='',1000)">${esc(m.id)}</td>
             <td>${esc(m.name)}</td>
             <td style="font-size:0.8rem;max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(m.walletAddress)}</td>
             <td>${esc(m.location)}</td>

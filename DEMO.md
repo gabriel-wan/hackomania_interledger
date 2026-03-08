@@ -7,39 +7,117 @@
 
 ## Pre-Demo Setup (Off-Camera)
 
+### 0. Configure Interledger Test Wallet Credentials
+
+You need **two types of wallets** on the Interledger test wallet:
+
+- **Fund wallet** (the master wallet in `.env`) — this is the community fund that collects contributions and sends payouts. Set via `OP_WALLET_ADDRESS`.
+- **Member wallet** (e.g. `tommywallet`) — a real wallet that seeded members point to, so payouts land in an actual account you can inspect.
+
+#### Fund wallet setup:
+1. Go to `https://wallet.interledger-test.dev` and create an account (or log in)
+2. Create a wallet for the fund (e.g. `communityfund`) — this is the master wallet
+3. Go to **Settings → Developer Keys** and create a new key pair:
+   - Copy the **Key ID** (a UUID)
+   - Download the **private key** file and save it as `community-fund/private.key`
+4. Update `community-fund/.env`:
+
+```dotenv
+OP_WALLET_ADDRESS=https://ilp.interledger-test.dev/communityfund
+OP_PRIVATE_KEY_PATH=./private.key
+OP_KEY_ID=<paste your key ID here>
+SIMULATE_PAYOUTS=false
+```
+
+#### Member wallet setup:
+1. Create a separate wallet for receiving payouts (e.g. `tommywallet`)
+2. All seeded members will use this wallet so you can see real money arriving
+3. Pass `--wallet tommywallet` when seeding (see Step 1 below)
+
+> **Note:** The wallet address in `.env` must use the `https://` format, not `$`.
+> Alice and Bob (registered manually in Scene 2) should also use real wallets created at `https://wallet.interledger-test.dev`.
+
+### 1. Start ClickHouse & Seed Members
+
 ```powershell
-# 1. Start ClickHouse
+# Start ClickHouse
 docker start community-fund-db
 
-# 2. Wipe old seed data (keeps manually registered members)
+# Wipe old seed data (keeps manually registered members)
 docker exec community-fund-db clickhouse-client --query "ALTER TABLE community_fund.members DELETE WHERE wallet_address LIKE '%/seed_%'"
 
-# 3. Seed geographic clusters around disaster-prone cities
+# Wipe old payouts (clean slate)
+docker exec community-fund-db clickhouse-client --query "ALTER TABLE community_fund.payouts DELETE WHERE 1=1"
+
+# Seed geographic clusters around disaster-prone cities
 cd C:\Users\weife\hackomania_interledger\community-fund
 
 # Singapore (flooding, urban density)
-npm run seed -- --count 300 --lat 1.3521 --lng 103.8198 --spread 0.3
+npm run seed -- --count 300 --lat 1.3521 --lng 103.8198 --spread 0.3 --wallet tommywallet
 
 # Manila, Philippines (typhoons, flooding)
-npm run seed -- --count 300 --lat 14.5995 --lng 120.9842 --spread 0.5
+npm run seed -- --count 300 --lat 14.5995 --lng 120.9842 --spread 0.5 --wallet tommywallet
 
 # Jakarta, Indonesia (flooding, earthquakes)
-npm run seed -- --count 300 --lat -6.2088 --lng 106.8456 --spread 0.4
+npm run seed -- --count 300 --lat -6.2088 --lng 106.8456 --spread 0.4 --wallet tommywallet
 
 # Tokyo, Japan (earthquakes, tsunamis)
-npm run seed -- --count 200 --lat 35.6762 --lng 139.6503 --spread 0.6
+npm run seed -- --count 200 --lat 35.6762 --lng 139.6503 --spread 0.6 --wallet tommywallet
 
 # Kathmandu, Nepal (earthquakes)
-npm run seed -- --count 200 --lat 27.7172 --lng 85.3240 --spread 0.3
-
-# 4. Start the server
-npm run dev
-
-# 5. Verify server is running
-curl http://localhost:3000/health
+npm run seed -- --count 200 --lat 27.7172 --lng 85.3240 --spread 0.3 --wallet tommywallet
 ```
 
-Expected: `{ "status": "ok", ... }` and ~1300 seeded members across 5 clusters.
+### 2. Start the Server
+
+```powershell
+npm run dev
+```
+
+Verify: `Invoke-RestMethod http://localhost:3000/health` → `{ "status": "ok", ... }`
+
+Expected: ~1300 seeded members across 5 clusters.
+
+### 3. Authorize Real ILP Payouts (One-Time)
+
+The Interledger test wallet requires browser-based consent before the fund can send outgoing payments. This step caches an access token so payouts transfer real money.
+
+> **Important:** `.env` must have `SIMULATE_PAYOUTS=false` (already set).
+
+1. Open in your **browser**: `http://localhost:3000/admin/payout-auth-url`
+2. The page returns JSON with a `redirectUrl` — click that link
+3. You are taken to `ilp.interledger-test.dev` — click **Approve** to grant the fund wallet permission to send outgoing payments
+4. You are redirected back to `http://localhost:3000/?message=payout_authorized`
+5. Verify in terminal:
+
+```powershell
+# Should show the cached token
+Invoke-RestMethod http://localhost:3000/admin/payout-auth-status
+```
+
+6. (Optional) Persist the token so it survives server restarts:
+
+```powershell
+# Copy the returned token into .env as OP_PAYOUT_TOKEN=<token>
+Invoke-RestMethod http://localhost:3000/admin/payout-token-value
+```
+
+### 4. Seed the Fund Balance
+
+The fund needs money before payouts can distribute anything.
+
+```powershell
+# Add $1000.00 (100000 cents) to the fund pool
+Invoke-RestMethod -Uri http://localhost:3000/test/seed-fund -Method POST
+```
+
+### 5. Seed a Payout Rule
+
+```powershell
+Invoke-RestMethod -Uri http://localhost:3000/test/seed-rule -Method POST
+```
+
+You are now ready to demo. The fund has money, a payout rule, and a live ILP authorization.
 
 ---
 
@@ -145,27 +223,26 @@ Expected: `{ "status": "ok", ... }` and ~1300 seeded members across 5 clusters.
 
 ## Scene 6 — Automatic Disaster Payout (Slide: "Instant Payouts")
 
-**What to show:** The trigger engine detecting a disaster and auto-paying members.
+**What to show:** The trigger engine detecting a disaster and auto-paying members via real ILP transfers.
 
-**Option A — Wait for real signal** (if USGS/NWS has a recent event):
-- Show the **Disaster Signals** tab with detected signals
-- If a signal ≥ severity 5 exists, payouts fire automatically
+> **Pre-requisite:** You must have completed Pre-Demo Setup steps 3-5 (authorize payouts, seed fund, seed rule).
 
-**Option B — Trigger manually via API** (reliable for demo):
+**Trigger the disaster** (run in PowerShell):
 
 ```powershell
-# Seed payout rule + trigger a simulated disaster
-curl -X POST http://localhost:3000/test/seed-rule
-curl -X POST http://localhost:3000/test/trigger-payout -H "Content-Type: application/json" -d "{\"type\": \"earthquake\", \"severity\": 7, \"location\": \"Singapore\"}"
+Invoke-RestMethod -Uri http://localhost:3000/test/trigger-payout -Method POST -ContentType "application/json" -Body '{"type":"earthquake","severity":7,"location":"Singapore"}'
 ```
+
+This sends real ILP outgoing payments from the fund wallet to each eligible member's wallet.
 
 Then in the browser:
 1. Click **Overview** tab → show the Payouts stat card incremented
 2. Scroll to **Recent Payouts** table → show payout entries with:
-   - Amount, currency, disaster type, distribution method
+   - Amount (real SGD), disaster type, distribution method
 3. Click **Disaster Signals** tab → show the signal that triggered it
+4. (Optional) Open the fund wallet at `https://wallet.interledger-test.dev` → show the actual money deductions in the transaction history
 
-**Talking point:** _"When a disaster is detected — either from live USGS/NWS data or a verified report — the rule engine automatically calculates and distributes payouts to affected members via ILP. No manual approval needed."_
+**Talking point:** _"When a disaster is detected — either from live USGS/NWS data or a verified report — the rule engine automatically calculates and distributes payouts to affected members via the Interledger Protocol. These are real money transfers, not simulations — you can see the deductions in the test wallet's transaction history. No manual approval needed."_
 
 ---
 
@@ -203,34 +280,34 @@ No screen recording needed — this is a Canva text slide.
 
 ```powershell
 # Health check
-curl http://localhost:3000/health
+Invoke-RestMethod http://localhost:3000/health
 
 # View fund status
-curl http://localhost:3000/dashboard/public
+Invoke-RestMethod http://localhost:3000/dashboard/public
 
 # List members
-curl http://localhost:3000/members
+Invoke-RestMethod http://localhost:3000/members
 
 # List disaster signals
-curl http://localhost:3000/dashboard/signals
+Invoke-RestMethod http://localhost:3000/dashboard/signals
 
 # View audit events
-curl http://localhost:3000/audit/events
+Invoke-RestMethod http://localhost:3000/audit/events
 
 # Verify audit chain integrity
-curl http://localhost:3000/audit/verify
+Invoke-RestMethod http://localhost:3000/audit/verify
 
 # Get root hash
-curl http://localhost:3000/audit/root-hash
+Invoke-RestMethod http://localhost:3000/audit/root-hash
 
 # Seed a payout rule (for demo)
-curl -X POST http://localhost:3000/test/seed-rule
+Invoke-RestMethod -Uri http://localhost:3000/test/seed-rule -Method POST
 
 # Trigger a test disaster payout
-curl -X POST http://localhost:3000/test/trigger-payout -H "Content-Type: application/json" -d "{\"type\": \"earthquake\", \"severity\": 7, \"location\": \"Singapore\"}"
+Invoke-RestMethod -Uri http://localhost:3000/test/trigger-payout -Method POST -ContentType "application/json" -Body '{"type":"earthquake","severity":7,"location":"Singapore"}'
 
 # Full automated flow (seed + fund + trigger + payout)
-curl -X POST http://localhost:3000/test/full-flow
+Invoke-RestMethod -Uri http://localhost:3000/test/full-flow -Method POST
 ```
 
 ---
