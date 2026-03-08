@@ -388,7 +388,18 @@
               <label>Location</label>
               <input id="memLocation" placeholder="City, Country" />
             </div>
+            <div class="form-group">
+              <label>Latitude</label>
+              <input id="memLat" type="number" step="any" placeholder="e.g. 1.3521" />
+            </div>
+            <div class="form-group">
+              <label>Longitude</label>
+              <input id="memLng" type="number" step="any" placeholder="e.g. 103.8198" />
+            </div>
           </div>
+          <label style="display:flex;align-items:center;gap:0.5rem;margin:1rem 0 0.5rem;font-size:0.9rem;color:#ccc;">
+            <input type="checkbox" id="memConsent" /> I consent to receiving emergency payouts to my wallet
+          </label>
           <div class="actions">
             <button class="btn" id="memBtn" onclick="registerMember()">Register Member</button>
           </div>
@@ -624,10 +635,15 @@
         email: document.getElementById('memEmail').value,
         walletAddress: normalizeWallet(document.getElementById('memWallet').value),
         location: document.getElementById('memLocation').value,
-        consentGiven: true,
+        latitude: parseFloat(document.getElementById('memLat').value) || 0,
+        longitude: parseFloat(document.getElementById('memLng').value) || 0,
+        consentGiven: document.getElementById('memConsent').checked,
       };
       if (!body.name || !body.email || !body.walletAddress) {
         return toast('Name, email, and wallet are required', true);
+      }
+      if (!body.consentGiven) {
+        return toast('You must give consent to register', true);
       }
       btn.disabled = true;
       btn.innerHTML = '<span class="spinner"></span>Registering...';
@@ -637,11 +653,14 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(body),
         });
-        toast('Member registered: ' + data.id);
+        toast('Member registered: ' + body.name);
         document.getElementById('memName').value = '';
         document.getElementById('memEmail').value = '';
         document.getElementById('memWallet').value = '';
         document.getElementById('memLocation').value = '';
+        document.getElementById('memLat').value = '';
+        document.getElementById('memLng').value = '';
+        document.getElementById('memConsent').checked = false;
         document.getElementById('memWalletPreview').textContent = '';
         loadMembers();
       } finally {
